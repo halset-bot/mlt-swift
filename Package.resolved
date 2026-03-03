@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "swift-geo",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ElectronicChartCentre/swift-geo",
+      "state" : {
+        "branch" : "main",
+        "revision" : "267c950cd0e0c636cef101493bf80cbdedaeabba"
+      }
+    }
+  ],
+  "version" : 2
+}
