@@ -1,4 +1,5 @@
 {
+  "originHash" : "bb17f2f590b594298924e24dd8db28a7098dc57a7704853ffb0e8af9768a7fe4",
   "pins" : [
     {
       "identity" : "swift-geo",
@@ -6,9 +7,9 @@
       "location" : "https://github.com/ElectronicChartCentre/swift-geo",
       "state" : {
         "branch" : "main",
-        "revision" : "267c950cd0e0c636cef101493bf80cbdedaeabba"
+        "revision" : "99310b2ce61c869f06dbc8b49aa8a5e59b822ce6"
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

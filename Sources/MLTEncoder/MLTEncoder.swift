@@ -1,7 +1,7 @@
 // MLTEncoder.swift — Top-level encoder orchestrating the binary MLT tile format.
 //
 // Geometry coordinates are projected from WGS-84 lon/lat to integer tile-space
-// using SwiftGeo's WebMercator projection.
+// using SwiftGeo's WebMercatorTile projection.
 //
 // Tile layout:
 //   For each layer:
@@ -22,7 +22,7 @@ public struct MLTEncoder {
     ///
     /// - Parameters:
     ///   - layers: Layers to encode.
-    ///   - tileZ: Zoom level used for WebMercator projection.
+    ///   - tileZ: Zoom level used for WebMercatorTile projection.
     ///   - tileX: Tile column.
     ///   - tileY: Tile row.
     public func encode(

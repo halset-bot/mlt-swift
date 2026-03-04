@@ -1,10 +1,9 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "MLTEncoder",
-    // Matching swift-geo's minimum platform requirement.
-    platforms: [.macOS(.v14)],
+    platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "MLTEncoder", targets: ["MLTEncoder"]),
         .executable(name: "MLTEncoderTests", targets: ["MLTEncoderTests"]),

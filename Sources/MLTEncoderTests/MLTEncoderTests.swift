@@ -6,8 +6,8 @@ import Foundation
 
 // MARK: - Minimal test harness
 
-var passed = 0
-var failed = 0
+nonisolated(unsafe) var passed = 0
+nonisolated(unsafe) var failed = 0
 
 func test(_ name: String, _ body: () throws -> Void) {
     do {

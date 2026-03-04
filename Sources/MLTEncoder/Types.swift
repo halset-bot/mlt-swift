@@ -2,7 +2,7 @@
 //
 // Geometry input uses SwiftGeo protocol types (Point, LineString, Polygon, etc.)
 // so callers work with geographic (WGS-84 lon/lat) coordinates directly.
-// The encoder projects them to integer tile-space using WebMercator internally.
+// The encoder projects them to integer tile-space using WebMercatorTile internally.
 //
 // MapLibre Tile (MLT) format: https://maplibre.org/maplibre-tile-spec/
 
