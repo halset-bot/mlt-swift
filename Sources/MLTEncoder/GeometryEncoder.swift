@@ -149,6 +149,17 @@ func encodeGeometryColumn(_ features: [MLTFeature], projector: TileProjector) th
 
 // MARK: - Sub-routines
 
+/// Ring coordinates stripped of the closing vertex.
+///
+/// MLT (like MVT) stores polygon rings without the repeated closing vertex.
+/// The decoder re-adds it automatically.  SwiftGeo's LinearGeometry includes
+/// first == last, so we always drop the last coordinate before encoding.
+private func openRing(_ ring: any LinearGeometry) -> [any Coordinate] {
+    let coords = ring.coordinates
+    guard coords.count >= 2 else { return Array(coords) }
+    return Array(coords.dropLast())
+}
+
 private func appendPolygon(
     _ poly: any Polygon,
     geomTypeBytesRaw: inout [UInt8],
@@ -165,8 +176,9 @@ private func appendPolygon(
     let allRings: [any LinearGeometry] = [poly.shell] + poly.holes
     numParts.append(UInt32(allRings.count))
     for ring in allRings {
-        numRings.append(UInt32(ring.coordinates.count))
-        for c in ring.coordinates {
+        let coords = openRing(ring)
+        numRings.append(UInt32(coords.count))
+        for c in coords {
             let v = projector.project(c); verticesX.append(v.x); verticesY.append(v.y)
         }
     }
@@ -211,8 +223,9 @@ private func appendMulti(
             let allRings: [any LinearGeometry] = [poly.shell] + poly.holes
             numParts.append(UInt32(allRings.count))
             for ring in allRings {
-                numRings.append(UInt32(ring.coordinates.count))
-                for c in ring.coordinates {
+                let coords = openRing(ring)
+                numRings.append(UInt32(coords.count))
+                for c in coords {
                     let v = projector.project(c); verticesX.append(v.x); verticesY.append(v.y)
                 }
             }

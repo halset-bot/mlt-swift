@@ -283,15 +283,43 @@ test("different zoom levels produce different output") {
 // JavaScript decoder (Tools/validate-mlt.js + Tools/mlt-bundle.cjs).
 // A parse error here means the binary output is not spec-compliant.
 
+/// One feature as returned by the JS validator.
+/// `coordinates` mirrors the decoder output: [ring/part][vertex][x, y]
+struct MLTValidationFeature: Decodable {
+    let id: Int?
+    let geometryType: String
+    let coordinates: [[[Int]]]   // [ring][vertex][0=x | 1=y]
+}
 struct MLTValidationLayer: Decodable {
     let name: String
     let numFeatures: Int
     let geometryTypes: [String]
+    let features: [MLTValidationFeature]
 }
 struct MLTValidationResult: Decodable {
     let ok: Bool
     let layers: [MLTValidationLayer]?
     let error: String?
+}
+
+// MARK: - Projection helper
+
+/// Project a single WGS-84 coordinate to integer tile-space using the global
+/// tile settings (tileZ/X/Y, extent=4096).  Matches the encoder's projection exactly.
+func projectToTile(_ coord: any Coordinate) -> (x: Int, y: Int) {
+    let p = TileProjector(tileZ: tileZ, tileX: tileX, tileY: tileY, extent: 4096)
+    let v = p.project(coord)
+    return (x: Int(v.x), y: Int(v.y))
+}
+
+/// Assert that a single decoded vertex `[[x,y]]` matches an expected tile coordinate.
+func expectVertex(_ ring: [[Int]], _ expected: (x: Int, y: Int),
+                  label: String = "", file: String = #file, line: Int = #line) throws {
+    guard ring.count == 1, ring[0].count == 2 else {
+        throw TestError.failed("expected single vertex [[x,y]], got \(ring) \(label) (\(file):\(line))")
+    }
+    try expectEqual(ring[0][0], expected.x, file: file, line: line)
+    try expectEqual(ring[0][1], expected.y, file: file, line: line)
 }
 
 /// Encodes `data` to a temp .mlt file, runs the Node.js validator, returns layer summaries.
@@ -406,6 +434,93 @@ test("JS decode: multiple layers round-trip") {
     try expectEqual(cities.numFeatures, 2)
     let routes = layers.first(where: { $0.name == "routes" })!
     try expectEqual(routes.numFeatures, 1)
+}
+
+// MARK: - JS coordinate validation
+
+test("JS decode: point coordinates") {
+    let layer = MLTLayer(name: "cities", features: [
+        MLTFeature(id: 1, geometry: geo.createPoint(coord: oslo)),
+        MLTFeature(id: 2, geometry: geo.createPoint(coord: bergen)),
+        MLTFeature(id: 3, geometry: geo.createPoint(coord: trondheim)),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    let features = layers[0].features
+    try expectEqual(features.count, 3)
+
+    // Each point's coordinates are [[[x, y]]] — one ring containing one vertex.
+    let coords = [(oslo, "Oslo"), (bergen, "Bergen"), (trondheim, "Trondheim")]
+    for (i, (wgs84, name)) in coords.enumerated() {
+        let expected = projectToTile(wgs84)
+        let ring = features[i].coordinates      // [ring][vertex][x/y]
+        try expect(ring.count == 1, "\(name): expected 1 ring, got \(ring.count)")
+        try expectVertex(ring[0], expected, label: name)
+    }
+}
+
+test("JS decode: linestring coordinates") {
+    // Two-vertex line Oslo→Bergen
+    let coords = [oslo, bergen]
+    let layer = MLTLayer(name: "routes", features: [
+        MLTFeature(geometry: geo.createLineString(coords: coords)),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    let ring = layers[0].features[0].coordinates[0]   // [vertex][x/y]
+    try expectEqual(ring.count, coords.count)
+    for (i, wgs84) in coords.enumerated() {
+        let exp = projectToTile(wgs84)
+        try expect(ring[i][0] == exp.x && ring[i][1] == exp.y,
+                   "vertex \(i): expected (\(exp.x),\(exp.y)) got (\(ring[i][0]),\(ring[i][1]))")
+    }
+}
+
+test("JS decode: polygon coordinates") {
+    // 4 unique corners.  The encoder strips the closing vertex (MLT convention);
+    // the decoder adds it back.  So we encode 4, decode 5 (4 + closing repeat).
+    let corners = [
+        geo.createCoordinate2D(x: 10.70, y: 59.90),
+        geo.createCoordinate2D(x: 10.70, y: 59.95),
+        geo.createCoordinate2D(x: 10.80, y: 59.95),
+        geo.createCoordinate2D(x: 10.80, y: 59.90),
+    ]
+    let ringCoords = corners + [corners[0]]          // add closing vertex for SwiftGeo
+    let ring = geo.createLinearRing(coords: ringCoords)
+    let layer = MLTLayer(name: "areas", features: [
+        MLTFeature(geometry: geo.createPolygon(shell: ring, holes: [])),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    let outerRing = layers[0].features[0].coordinates[0]   // [vertex][x/y]
+
+    // Decoder emits 4 stored vertices + 1 re-added closing vertex = 5
+    try expectEqual(outerRing.count, corners.count + 1)
+    // Check the 4 unique corners
+    for (i, wgs84) in corners.enumerated() {
+        let exp = projectToTile(wgs84)
+        try expect(outerRing[i][0] == exp.x && outerRing[i][1] == exp.y,
+                   "corner \(i): expected (\(exp.x),\(exp.y)) got (\(outerRing[i][0]),\(outerRing[i][1]))")
+    }
+    // Closing vertex must equal first
+    try expect(outerRing[4] == outerRing[0], "closing vertex \(outerRing[4]) != first \(outerRing[0])")
+}
+
+test("JS decode: multipoint coordinates") {
+    let points = [oslo, bergen, trondheim]
+    let mp = DefaultMultiPoint(coordinates: points)
+    let layer = MLTLayer(name: "multipt", features: [
+        MLTFeature(geometry: mp),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    // MultiPoint: coordinates = [[[x,y]], [[x,y]], ...] — one ring per point
+    let coords = layers[0].features[0].coordinates
+    try expectEqual(coords.count, points.count)
+    for (i, wgs84) in points.enumerated() {
+        let exp = projectToTile(wgs84)
+        try expectVertex(coords[i], exp, label: "point \(i)")
+    }
 }
 
 // MARK: - Summary

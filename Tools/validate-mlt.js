@@ -5,11 +5,27 @@
 // Usage:
 //   node validate-mlt.js <path-to-tile.mlt>
 //
-// Exits 0 and prints JSON on success:
-//   { "ok": true, "layers": [ { "name": "...", "numFeatures": N, "geometryTypes": [...] } ] }
+// Output on success:
+//   {
+//     "ok": true,
+//     "layers": [{
+//       "name": "...",
+//       "numFeatures": N,
+//       "geometryTypes": ["POINT", ...],   -- unique types, sorted
+//       "features": [{
+//         "id": N | null,
+//         "geometryType": "POINT",
+//         "coordinates": [                 -- rings/parts array
+//           [[x, y], [x, y], ...]          -- vertices as [x, y] integers
+//         ]
+//       }, ...]
+//     }]
+//   }
 //
-// Exits 1 and prints JSON on failure:
-//   { "ok": false, "error": "..." }
+// Coordinates are tile-space integers (same CRS as the encoder input, i.e.
+// WebMercator pixel coords within the tile, range [0, extent)).
+//
+// Exits 1 and prints { "ok": false, "error": "..." } on failure.
 //
 // Regenerate mlt-bundle.cjs (when @maplibre/mlt is updated):
 //   npm install @maplibre/mlt
@@ -29,25 +45,43 @@ if (!mltPath) {
     process.exit(1);
 }
 
+/**
+ * Convert a coordinates array from the decoder ({x,y} objects per vertex)
+ * to plain [[x, y], ...] integer arrays, one sub-array per ring/part.
+ *
+ * The decoder returns geometry.coordinates as an array of "rings" where each
+ * ring is an array of @mapbox/point-geometry Point objects with .x / .y fields.
+ */
+function coordsToArrays(coordinates) {
+    if (!coordinates) return [];
+    return coordinates.map(ring => ring.map(pt => [Math.round(pt.x), Math.round(pt.y)]));
+}
+
 try {
     const bytes = new Uint8Array(fs.readFileSync(mltPath));
     const featureTables = decodeTile(bytes);
 
     const layers = featureTables.map(table => {
-        // Collect unique geometry type names from the first few features.
-        const typeSet = new Set();
-        let count = 0;
+        const typeSet  = new Set();
+        const features = [];
+
         for (const feature of table) {
-            if (feature.geometry != null) {
-                const typeName = GEOMETRY_TYPE[feature.geometry.type] ?? `UNKNOWN(${feature.geometry.type})`;
-                typeSet.add(typeName);
-            }
-            count++;
+            const typeName = feature.geometry != null
+                ? (GEOMETRY_TYPE[feature.geometry.type] ?? `UNKNOWN(${feature.geometry.type})`)
+                : 'NONE';
+            typeSet.add(typeName);
+            features.push({
+                id:           feature.id ?? null,
+                geometryType: typeName,
+                coordinates:  coordsToArrays(feature.geometry?.coordinates),
+            });
         }
+
         return {
-            name: table.name,
-            numFeatures: count,
+            name:          table.name,
+            numFeatures:   features.length,
             geometryTypes: [...typeSet].sort(),
+            features,
         };
     });
 
