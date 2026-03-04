@@ -277,6 +277,137 @@ test("different zoom levels produce different output") {
     try expect(d6 != d10, "Different zoom tiles should encode differently")
 }
 
+// MARK: - JS decoder cross-validation
+//
+// These tests encode a tile and then decode it with the official @maplibre/mlt
+// JavaScript decoder (Tools/validate-mlt.js + Tools/mlt-bundle.cjs).
+// A parse error here means the binary output is not spec-compliant.
+
+struct MLTValidationLayer: Decodable {
+    let name: String
+    let numFeatures: Int
+    let geometryTypes: [String]
+}
+struct MLTValidationResult: Decodable {
+    let ok: Bool
+    let layers: [MLTValidationLayer]?
+    let error: String?
+}
+
+/// Encodes `data` to a temp .mlt file, runs the Node.js validator, returns layer summaries.
+func validateWithJSDecoder(_ data: Data, sourceFile: String = #filePath) throws -> [MLTValidationLayer] {
+    // Locate Tools/ relative to this source file:
+    //   <root>/Sources/MLTEncoderTests/MLTEncoderTests.swift → up ×3 → <root>
+    let toolsURL = URL(fileURLWithPath: sourceFile)
+        .deletingLastPathComponent()   // drop MLTEncoderTests/
+        .deletingLastPathComponent()   // drop Sources/
+        .deletingLastPathComponent()   // drop project root (we're now at <root>)
+        .appendingPathComponent("Tools/validate-mlt.js")
+
+    // Write tile bytes to a temp file.
+    let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("mlt-validate-\(UInt32.random(in: 0..<UInt32.max)).mlt")
+    try data.write(to: tmpURL)
+    defer { try? FileManager.default.removeItem(at: tmpURL) }
+
+    // Run: node Tools/validate-mlt.js <tmpfile>
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/local/bin/node")
+    proc.arguments    = [toolsURL.path, tmpURL.path]
+    let outPipe = Pipe()
+    let errPipe = Pipe()
+    proc.standardOutput = outPipe
+    proc.standardError  = errPipe
+    try proc.run()
+    proc.waitUntilExit()
+
+    let outStr = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let errStr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+    if proc.terminationStatus != 0 {
+        throw TestError.failed(
+            "JS validator exited \(proc.terminationStatus): \(errStr.isEmpty ? outStr : errStr)")
+    }
+    guard let jsonData = outStr.data(using: .utf8) else {
+        throw TestError.failed("JS validator produced no output")
+    }
+    let result = try JSONDecoder().decode(MLTValidationResult.self, from: jsonData)
+    if !result.ok {
+        throw TestError.failed("JS decoder error: \(result.error ?? "unknown")")
+    }
+    return result.layers ?? []
+}
+
+test("JS decode: point layer round-trip") {
+    let layer = MLTLayer(name: "cities", features: [
+        MLTFeature(id: 1, geometry: geo.createPoint(coord: oslo),
+                   properties: ["name": .string("Oslo"),      "pop": .int32(700_000)]),
+        MLTFeature(id: 2, geometry: geo.createPoint(coord: bergen),
+                   properties: ["name": .string("Bergen"),    "pop": .int32(280_000)]),
+        MLTFeature(id: 3, geometry: geo.createPoint(coord: trondheim),
+                   properties: ["name": .string("Trondheim"), "pop": .int32(200_000)]),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    try expectEqual(layers.count, 1)
+    try expectEqual(layers[0].name, "cities")
+    try expectEqual(layers[0].numFeatures, 3)
+    try expect(layers[0].geometryTypes.contains("POINT"), "expected POINT geometry")
+}
+
+test("JS decode: linestring layer round-trip") {
+    let layer = MLTLayer(name: "routes", features: [
+        MLTFeature(geometry: geo.createLineString(coords: [oslo, bergen]),
+                   properties: ["class": .string("ferry")]),
+        MLTFeature(geometry: geo.createLineString(coords: [oslo, trondheim]),
+                   properties: ["class": .string("road")]),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    try expectEqual(layers.count, 1)
+    try expectEqual(layers[0].name, "routes")
+    try expectEqual(layers[0].numFeatures, 2)
+    try expect(layers[0].geometryTypes.contains("LINESTRING"), "expected LINESTRING geometry")
+}
+
+test("JS decode: polygon layer round-trip") {
+    let poly = geo.createPolygon(shell: squareRing, holes: [])
+    let layer = MLTLayer(name: "areas", features: [
+        MLTFeature(geometry: poly, properties: ["type": .string("nature")]),
+    ])
+    let data = try encoder.encode(layers: [layer], tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    try expectEqual(layers.count, 1)
+    try expectEqual(layers[0].name, "areas")
+    try expectEqual(layers[0].numFeatures, 1)
+    try expect(layers[0].geometryTypes.contains("POLYGON"), "expected POLYGON geometry")
+}
+
+test("JS decode: multiple layers round-trip") {
+    let tileLayers = [
+        MLTLayer(name: "cities", features: [
+            MLTFeature(id: 1, geometry: geo.createPoint(coord: oslo),
+                       properties: ["name": .string("Oslo")]),
+            MLTFeature(id: 2, geometry: geo.createPoint(coord: bergen),
+                       properties: ["name": .string("Bergen")]),
+        ]),
+        MLTLayer(name: "routes", features: [
+            MLTFeature(geometry: geo.createLineString(coords: [oslo, bergen]),
+                       properties: ["class": .string("ferry")]),
+        ]),
+    ]
+    let data = try encoder.encode(layers: tileLayers, tileZ: tileZ, tileX: tileX, tileY: tileY)
+    let layers = try validateWithJSDecoder(data)
+    try expectEqual(layers.count, 2)
+    let names = Set(layers.map(\.name))
+    try expect(names.contains("cities") && names.contains("routes"),
+               "expected layers 'cities' and 'routes', got \(names)")
+    let cities = layers.first(where: { $0.name == "cities" })!
+    try expectEqual(cities.numFeatures, 2)
+    let routes = layers.first(where: { $0.name == "routes" })!
+    try expectEqual(routes.numFeatures, 1)
+}
+
 // MARK: - Summary
 
 print("\n\(passed + failed) tests: \(passed) passed, \(failed) failed")

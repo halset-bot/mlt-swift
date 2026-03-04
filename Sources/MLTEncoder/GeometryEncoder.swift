@@ -107,8 +107,11 @@ func encodeGeometryColumn(_ features: [MLTFeature], projector: TileProjector) th
     if hasParts { streamCount += 1 }
     if hasRings { streamCount += 1 }
 
-    // Encode streams
-    let geomTypeData = encodeByteRLE(geomTypeBytesRaw)
+    // Geometry type stream: one plain unsigned varint per feature (values 0–5).
+    // We intentionally avoid Byte-RLE here because the JS decoder only reads the
+    // required RLE metadata (runs/numRleValues) when physicalLevelTechnique ≠ NONE.
+    var geomTypeData = Data()
+    for t in geomTypeBytesRaw { encodeVarint(UInt32(t), into: &geomTypeData) }
 
     var numGeomData = Data()
     for v in numGeometries { encodeVarint(v, into: &numGeomData) }
@@ -119,6 +122,8 @@ func encodeGeometryColumn(_ features: [MLTFeature], projector: TileProjector) th
     var numRingsData = Data()
     for v in numRings { encodeVarint(v, into: &numRingsData) }
 
+    // Vertex buffer: ZigZag-encoded x,y pairs written as unsigned varints.
+    // Use DictionaryType.VERTEX so the decoder routes to the ZigZag-decode path.
     var vertexData = Data()
     for i in 0 ..< verticesX.count {
         encodeZigZag32(verticesX[i], into: &vertexData)
@@ -128,7 +133,7 @@ func encodeGeometryColumn(_ features: [MLTFeature], projector: TileProjector) th
     // Assemble
     var out = Data()
     encodeVarint(UInt32(streamCount), into: &out)
-    out.append(encodeStream(.dataByteRLE, numValues: features.count, data: geomTypeData))
+    out.append(encodeStream(.dataVarint, numValues: features.count, data: geomTypeData))
     if hasMulti {
         out.append(encodeStream(.lengthGeometries, numValues: numGeometries.count, data: numGeomData))
     }
@@ -138,7 +143,7 @@ func encodeGeometryColumn(_ features: [MLTFeature], projector: TileProjector) th
     if hasRings {
         out.append(encodeStream(.lengthRings, numValues: numRings.count, data: numRingsData))
     }
-    out.append(encodeStream(.dataVarint, numValues: verticesX.count * 2, data: vertexData))
+    out.append(encodeStream(.dataVertexVarint, numValues: verticesX.count * 2, data: vertexData))
     return out
 }
 

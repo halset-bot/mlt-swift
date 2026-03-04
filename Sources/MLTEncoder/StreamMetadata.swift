@@ -94,10 +94,22 @@ extension StreamMeta {
         physicalTechnique: .none
     )
 
-    /// DATA stream — plain VarInt integers (unsigned).
+    /// DATA stream — plain VarInt integers (unsigned, no further transformation).
     static let dataVarint = StreamMeta(
         physicalType:      .data,
         logicalType:       DictionaryType.none.rawValue,
+        logicalTechnique1: .none,
+        logicalTechnique2: .none,
+        physicalTechnique: .varint
+    )
+
+    /// DATA stream — vertex buffer (DictionaryType.VERTEX).
+    /// Decoder identifies this dict-type specifically and applies ZigZag decoding
+    /// (isSigned=true path in decodeIntStream).  Data must be ZigZag-encoded
+    /// x,y pairs written as unsigned varints.
+    static let dataVertexVarint = StreamMeta(
+        physicalType:      .data,
+        logicalType:       DictionaryType.vertex.rawValue,  // 3
         logicalTechnique1: .none,
         logicalTechnique2: .none,
         physicalTechnique: .varint
