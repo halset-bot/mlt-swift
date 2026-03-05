@@ -523,6 +523,79 @@ test("JS decode: multipoint coordinates") {
     }
 }
 
+// MARK: - Visual demo tile
+//
+// Encodes a tile with representative geometry types and writes it to
+// Tools/visual-demo.mlt.  Run `node Tools/build-preview.js` afterwards to
+// generate Tools/preview.html — a self-contained MapLibre GL JS map page.
+
+print("\n=== Visual Demo ===\n")
+
+test("write visual demo tile") {
+    // Tile z=6 x=33 y=19 covers roughly lon 5.6°–11.3°, lat 60.4°–62.4° (western Norway).
+    let demoZ = 6, demoX = 33, demoY = 19
+
+    let c = DefaultGeometryCreator()
+
+    // --- Points: three towns within the tile ---
+    let sogndal     = c.createCoordinate2D(x: 7.10, y: 61.23) // Sogndal
+    let dombas      = c.createCoordinate2D(x: 9.13, y: 62.08) // Dombås
+    let lillehammer = c.createCoordinate2D(x: 10.47, y: 61.12) // Lillehammer
+
+    let citiesLayer = MLTLayer(
+        name: "cities",
+        extent: 4096,
+        features: [
+            MLTFeature(id: 1, geometry: c.createPoint(coord: sogndal),
+                       properties: ["name": .string("Sogndal"), "pop": .int32(7_000)]),
+            MLTFeature(id: 2, geometry: c.createPoint(coord: dombas),
+                       properties: ["name": .string("Dombås"),  "pop": .int32(1_300)]),
+            MLTFeature(id: 3, geometry: c.createPoint(coord: lillehammer),
+                       properties: ["name": .string("Lillehammer"), "pop": .int32(27_000)]),
+        ]
+    )
+
+    // --- Line: a route connecting the three towns ---
+    let routesLayer = MLTLayer(
+        name: "routes",
+        extent: 4096,
+        features: [
+            MLTFeature(id: 10,
+                       geometry: c.createLineString(coords: [sogndal, dombas, lillehammer]),
+                       properties: ["name": .string("E136 corridor"), "type": .string("highway")]),
+        ]
+    )
+
+    // --- Polygon: a bounding rectangle around the region ---
+    let shell = c.createLinearRing(coords: [
+        c.createCoordinate2D(x: 6.5,  y: 60.6),
+        c.createCoordinate2D(x: 6.5,  y: 62.3),
+        c.createCoordinate2D(x: 11.0, y: 62.3),
+        c.createCoordinate2D(x: 11.0, y: 60.6),
+        c.createCoordinate2D(x: 6.5,  y: 60.6), // close the ring
+    ])
+    let areasLayer = MLTLayer(
+        name: "areas",
+        extent: 4096,
+        features: [
+            MLTFeature(id: 20,
+                       geometry: c.createPolygon(shell: shell, holes: []),
+                       properties: ["name": .string("Demo region"), "type": .string("bbox")]),
+        ]
+    )
+
+    let data = try encoder.encode(
+        layers: [areasLayer, routesLayer, citiesLayer],
+        tileZ: demoZ, tileX: demoX, tileY: demoY
+    )
+
+    // Write next to the other Tools so build-preview.js can find it.
+    let outURL = URL(fileURLWithPath: "Tools/visual-demo.mlt")
+    try data.write(to: outURL)
+    print("    Wrote \(data.count) bytes → \(outURL.path)")
+    print("    Run: node Tools/build-preview.js")
+}
+
 // MARK: - Summary
 
 print("\n\(passed + failed) tests: \(passed) passed, \(failed) failed")
