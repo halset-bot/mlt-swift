@@ -10,6 +10,7 @@ import SwiftGeo
 /// Wraps SwiftGeo's WebMercatorTile projection and scales output to MLT tile coordinates.
 struct TileProjector {
     private let projection: WebMercatorTile
+    private let extent: Int
 
     /// - Parameters:
     ///   - tileZ: Zoom level.
@@ -22,11 +23,17 @@ struct TileProjector {
         // so pixelRatio = extent / 256 gives us [0, extent) directly.
         let pixelRatio = max(1, Int(extent) / 256)
         self.projection = WebMercatorTile(x: tileX, y: tileY, z: tileZ, pixelRatio: pixelRatio)
+        self.extent = Int(extent)
     }
 
     /// Project a WGS-84 coordinate (x=lon, y=lat) to tile-space integers.
     func project(_ coord: any Coordinate) -> (x: Int32, y: Int32) {
         let p = projection.forward(coordinate: coord)
-        return (x: Int32(p.x.rounded()), y: Int32(p.y.rounded()))
+        // WebMercatorTile.forward() returns y=0 at the south (bottom) edge of
+        // the tile, increasing to y≈extent at the north (top) edge.
+        // MLT/MVT tile space uses the opposite convention: y=0 at the north,
+        // increasing southward.  Flip to match.
+        let flippedY = Double(extent - 1) - p.y
+        return (x: Int32(p.x.rounded()), y: Int32(flippedY.rounded()))
     }
 }
