@@ -532,47 +532,50 @@ test("JS decode: multipoint coordinates") {
 print("\n=== Visual Demo ===\n")
 
 test("write visual demo tile") {
-    // Tile z=6 x=33 y=19 covers roughly lon 5.6°–11.3°, lat 60.4°–62.4° (western Norway).
-    let demoZ = 6, demoX = 33, demoY = 19
+    // Tile z=6 x=33 y=18 covers lon 5.625°–11.25°, lat 58.81°–61.61° (southern Norway).
+    // Oslo (59.91°N, 10.75°E), Stavanger (58.97°N, 5.73°E) and Gjøvik (60.79°N, 10.69°E)
+    // all project to tile-space coordinates within [0, 4096).
+    let demoZ = 6, demoX = 33, demoY = 18
 
     let c = DefaultGeometryCreator()
 
     // --- Points: three towns within the tile ---
-    let sogndal     = c.createCoordinate2D(x: 7.10, y: 61.23) // Sogndal
-    let dombas      = c.createCoordinate2D(x: 9.13, y: 62.08) // Dombås
-    let lillehammer = c.createCoordinate2D(x: 10.47, y: 61.12) // Lillehammer
+    let oslo      = c.createCoordinate2D(x: 10.7522, y: 59.9139) // Oslo
+    let stavanger = c.createCoordinate2D(x: 5.7330,  y: 58.9701) // Stavanger
+    let gjovik    = c.createCoordinate2D(x: 10.6910, y: 60.7945) // Gjøvik
 
     let citiesLayer = MLTLayer(
         name: "cities",
         extent: 4096,
         features: [
-            MLTFeature(id: 1, geometry: c.createPoint(coord: sogndal),
-                       properties: ["name": .string("Sogndal"), "pop": .int32(7_000)]),
-            MLTFeature(id: 2, geometry: c.createPoint(coord: dombas),
-                       properties: ["name": .string("Dombås"),  "pop": .int32(1_300)]),
-            MLTFeature(id: 3, geometry: c.createPoint(coord: lillehammer),
-                       properties: ["name": .string("Lillehammer"), "pop": .int32(27_000)]),
+            MLTFeature(id: 1, geometry: c.createPoint(coord: oslo),
+                       properties: ["name": .string("Oslo"),      "pop": .int32(700_000)]),
+            MLTFeature(id: 2, geometry: c.createPoint(coord: stavanger),
+                       properties: ["name": .string("Stavanger"), "pop": .int32(145_000)]),
+            MLTFeature(id: 3, geometry: c.createPoint(coord: gjovik),
+                       properties: ["name": .string("Gjøvik"),    "pop": .int32(30_000)]),
         ]
     )
 
-    // --- Line: a route connecting the three towns ---
+    // --- Line: E18 corridor Stavanger → Oslo ---
+    let drammen = c.createCoordinate2D(x: 10.2045, y: 59.7440) // Drammen (waypoint)
     let routesLayer = MLTLayer(
         name: "routes",
         extent: 4096,
         features: [
             MLTFeature(id: 10,
-                       geometry: c.createLineString(coords: [sogndal, dombas, lillehammer]),
-                       properties: ["name": .string("E136 corridor"), "type": .string("highway")]),
+                       geometry: c.createLineString(coords: [stavanger, drammen, oslo]),
+                       properties: ["name": .string("E18"), "type": .string("highway")]),
         ]
     )
 
-    // --- Polygon: a bounding rectangle around the region ---
+    // --- Polygon: bounding rectangle within tile bounds ---
     let shell = c.createLinearRing(coords: [
-        c.createCoordinate2D(x: 6.5,  y: 60.6),
-        c.createCoordinate2D(x: 6.5,  y: 62.3),
-        c.createCoordinate2D(x: 11.0, y: 62.3),
-        c.createCoordinate2D(x: 11.0, y: 60.6),
-        c.createCoordinate2D(x: 6.5,  y: 60.6), // close the ring
+        c.createCoordinate2D(x: 6.0,  y: 59.0),
+        c.createCoordinate2D(x: 6.0,  y: 61.2),
+        c.createCoordinate2D(x: 11.0, y: 61.2),
+        c.createCoordinate2D(x: 11.0, y: 59.0),
+        c.createCoordinate2D(x: 6.0,  y: 59.0), // close the ring
     ])
     let areasLayer = MLTLayer(
         name: "areas",

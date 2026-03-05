@@ -21,7 +21,7 @@ const TOOLS    = __dirname;
 const MLT_PATH = path.join(TOOLS, 'visual-demo.mlt');
 
 // Demo tile coordinates — must match the Swift encoder call.
-const TILE_Z = 6, TILE_X = 33, TILE_Y = 19;
+const TILE_Z = 6, TILE_X = 33, TILE_Y = 18;
 
 // ── HTML page ─────────────────────────────────────────────────────────────────
 const HTML = `<!DOCTYPE html>
@@ -30,8 +30,8 @@ const HTML = `<!DOCTYPE html>
   <meta charset="utf-8" />
   <title>MLTEncoder Preview</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link  rel="stylesheet" href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" />
-  <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+  <link  rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
   <style>
     html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; }
     #legend {
@@ -112,7 +112,7 @@ const map = new maplibregl.Map({
         paint: { 'text-color': '#1a5c2a', 'text-halo-color': '#fff', 'text-halo-width': 1.5 } },
     ],
   },
-  center: [8.8, 61.4],
+  center: [8.5, 60.0],
   zoom: 6.5,
 });
 
