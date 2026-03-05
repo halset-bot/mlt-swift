@@ -103,6 +103,31 @@ Type inference rules:
 - Any feature missing the key or providing `.null` makes the column nullable
 - Mixed types (e.g. `.int32` and `.string` in the same column) throw `MLTEncoderError.typeMismatch`
 
+## Visual demo
+
+A built-in test encodes a demo tile (Oslo, Stavanger, Gjøvik + a route and a polygon over southern Norway) and a Node.js dev server serves it to MapLibre GL JS — no GeoJSON conversion, MapLibre reads the MLT tile directly.
+
+**Requirements:** Node.js
+
+```bash
+# 1. Build and run the tests — this writes Tools/visual-demo.mlt
+swift run MLTEncoderTests
+
+# 2. Start the tile server (default port 3000)
+node Tools/serve-preview.js
+
+# 3. Open in browser
+open http://localhost:3000
+```
+
+Re-run step 1 and refresh the browser to pick up changes to the encoder.
+
+The server exposes:
+- `GET /` — MapLibre GL JS 5 map page
+- `GET /tiles/{z}/{x}/{y}.mlt` — raw MLT tile bytes (Swift output)
+
+The map style uses `encoding: 'mlt'` on the vector source so MapLibre decodes the tile natively.
+
 ## License
 
 Apache 2.0
