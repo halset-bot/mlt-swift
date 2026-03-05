@@ -16,7 +16,7 @@ Uses [swift-geo](https://github.com/ElectronicChartCentre/swift-geo) geometry ty
 ## Requirements
 
 - macOS 14+ / iOS 17+
-- Swift 5.9+
+- Swift 6.2+
 
 ## Installation
 
