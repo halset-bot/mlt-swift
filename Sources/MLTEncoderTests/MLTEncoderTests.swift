@@ -340,7 +340,7 @@ func validateWithJSDecoder(_ data: Data, sourceFile: String = #filePath) throws 
 
     // Run: node Tools/validate-mlt.js <tmpfile>
     let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/local/bin/node")
+    proc.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/node")
     proc.arguments    = [toolsURL.path, tmpURL.path]
     let outPipe = Pipe()
     let errPipe = Pipe()
